@@ -45,6 +45,14 @@ namespace ORB_SLAM3
 {
 
 
+/**
+ * @brief
+ * 包含两部分：估计运动，跟踪局部地图
+ * 
+ * step1: 初始化
+ * step2： 跟踪
+ * step3: 记录位姿信息，用于轨迹复现
+ */
 Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Atlas *pAtlas, KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, const string &_nameSeq):
     mState(NO_IMAGES_YET), mSensor(sensor), mTrackedFr(0), mbStep(false),
     mbOnlyTracking(false), mbMapUpdated(false), mbVO(false), mpORBVocabulary(pVoc), mpKeyFrameDB(pKFDB),
@@ -488,7 +496,11 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const d
     return mCurrentFrame.mTcw.clone();
 }
 
-
+/**
+ * step1: 将彩色图像转为灰度图像
+ * step2: 构造Frame
+ * step3: 跟踪
+ */
 cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename)
 {
     mImGray = im;
@@ -508,6 +520,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
             cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
     }
 
+    // step2
     if (mSensor == System::MONOCULAR)
     {
         if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET ||(lastID - initID) < mMaxFrames)
@@ -534,7 +547,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
     mCurrentFrame.mnDataset = mnNumDataset;
 
     lastID = mCurrentFrame.mnId;
-    Track();
+    Track(); // step3 
 
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
