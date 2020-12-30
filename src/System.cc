@@ -343,6 +343,9 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const doub
     return Tcw;
 }
 
+/** 单目slam追踪器接口
+ * https://www.bilibili.com/read/cv8854917
+ */
 cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const vector<IMU::Point>& vImuMeas, string filename)
 {
     if(mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR)
@@ -396,6 +399,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
+    // !
     cv::Mat Tcw = mpTracker->GrabImageMonocular(im,timestamp,filename);
 
     unique_lock<mutex> lock2(mMutexState);

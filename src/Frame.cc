@@ -42,6 +42,7 @@ float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
 //For stereo fisheye matching
 cv::BFMatcher Frame::BFmatcher = cv::BFMatcher(cv::NORM_HAMMING);
 
+// Frame()主要工作是特征点提取,包括图像金字塔,特征点均匀化,四叉树算法分发特征点,特征点方向计算等
 Frame::Frame(): mpcpi(NULL), mpImuPreintegrated(NULL), mpPrevFrame(NULL), mpImuPreintegratedFrame(NULL), mpReferenceKF(static_cast<KeyFrame*>(NULL)), mbImuPreintegrated(false)
 {
 }
@@ -367,7 +368,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
     mpMutexImu = new std::mutex();
 }
 
-
+/** 将特征点分配到图像网格中 **/
 void Frame::AssignFeaturesToGrid()
 {
     // Fill matrix with points
@@ -405,6 +406,7 @@ void Frame::ExtractORB(int flag, const cv::Mat &im, const int x0, const int x1)
 {
     vector<int> vLapping = {x0,x1};
     if(flag==0)
+        // 这里调用的是 ORBextractor::operator()
         monoLeft = (*mpORBextractorLeft)(im,cv::Mat(),mvKeys,mDescriptors,vLapping);
     else
         monoRight = (*mpORBextractorRight)(im,cv::Mat(),mvKeysRight,mDescriptorsRight,vLapping);
@@ -729,6 +731,7 @@ void Frame::ComputeBoW()
     }
 }
 
+/** 矫正特征点 **/
 void Frame::UndistortKeyPoints()
 {
     if(mDistCoef.at<float>(0)==0.0)

@@ -71,7 +71,7 @@ namespace ORB_SLAM3
     const int HALF_PATCH_SIZE = 15;
     const int EDGE_THRESHOLD = 19;
 
-
+    // 
     static float IC_Angle(const Mat& image, Point2f pt,  const vector<int> & u_max)
     {
         int m_01 = 0, m_10 = 0;
@@ -1149,6 +1149,7 @@ namespace ORB_SLAM3
         return monoIndex;
     }
 
+    /** 构建金字塔 **/ 
     void ORBextractor::ComputePyramid(cv::Mat image)
     {
         for (int level = 0; level < nlevels; ++level)
