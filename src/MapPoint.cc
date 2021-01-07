@@ -424,6 +424,11 @@ bool MapPoint::IsInKeyFrame(KeyFrame *pKF)
     return (mObservations.count(pKF));
 }
 
+/** 更新平均观测方向以及观测距离范围
+ * 由于一个MapPoint会被许多相机观测到，因此在插入关键帧后，需要更新相应变量，
+ * 创建新的关键帧的时候会调用该函数
+ * 
+ */ 
 void MapPoint::UpdateNormalAndDepth()
 {
     map<KeyFrame*,tuple<int,int>> observations;
@@ -487,12 +492,17 @@ void MapPoint::UpdateNormalAndDepth()
 
     {
         unique_lock<mutex> lock3(mMutexPos);
-        mfMaxDistance = dist*levelScaleFactor;
+        // 观测相机位置到该点的距离上限
+        mfMaxDistance = dist*levelScaleFactor; 
+        // 观测相机位置到该点的距离下限
         mfMinDistance = mfMaxDistance/pRefKF->mvScaleFactors[nLevels-1];
         mNormalVector = normal/n;
     }
 }
 
+/**
+ *
+ */ 
 void MapPoint::SetNormalVector(cv::Mat& normal)
 {
     unique_lock<mutex> lock3(mMutexPos);
@@ -511,15 +521,24 @@ float MapPoint::GetMaxDistanceInvariance()
     return 1.2f*mfMaxDistance;
 }
 
+
+/** 尺度不变性 
+ * 因为在进行投影匹配的时候会给定特征点的搜索范围，由于考虑到处于不同尺度
+ * (也就是距离相机远近,位于图像金字塔中不同图层)的特征点受到相机旋转的影
+ * 响不同，因此会希望距离相机近的点的搜索范围更大一点,距离相机更远的点的
+ * 搜索范围更小一点,所以要在这里,根据点到关键帧/帧的距离来估计它在当前的
+ * 关键帧/帧中,会大概处于哪个尺度。
+ */
 int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
 {
     float ratio;
     {
         unique_lock<mutex> lock(mMutexPos);
-        ratio = mfMaxDistance/currentDist;
+        ratio = mfMaxDistance/currentDist; // dmax / d
     }
 
-    int nScale = ceil(log(ratio)/pKF->mfLogScaleFactor);
+    // 根据地图点到光心的距离,预测一个类似特征金字塔的尺度
+    int nScale = ceil(log(ratio)/pKF->mfLogScaleFactor); // mfLogScaleFactor = 1.2
     if(nScale<0)
         nScale = 0;
     else if(nScale>=pKF->mnScaleLevels)
@@ -536,6 +555,7 @@ int MapPoint::PredictScale(const float &currentDist, Frame* pF)
         ratio = mfMaxDistance/currentDist;
     }
 
+    // 根据地图点到光心的距离,预测一个类似特征金字塔的尺度
     int nScale = ceil(log(ratio)/pF->mfLogScaleFactor);
     if(nScale<0)
         nScale = 0;

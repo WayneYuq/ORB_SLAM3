@@ -534,8 +534,18 @@ namespace ORB_SLAM3
 
     }
 
-    vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
-                                                         const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
+    /** 四叉树算法
+     * 广泛应用于图像处理、空间数据索引、2D中的快速碰撞检测、存储稀疏数据等， 
+     * 而八叉树（Octree）主要应用于3D图形处理
+     * 
+     * ORB-SLAM中使用四叉树来快速筛选特征点，筛选的目的是非极大值抑制，
+     * 取局部特征点邻域中FAST角点相应值最大的点，而如何搜索到这些扎堆的特
+     * 征点，则采用的是四叉树的分快思想，递归找到成群的点，并从中找到相应值最大的点。
+     */
+    vector<cv::KeyPoint> 
+    ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>& vToDistributeKeys, // 未分的关键点 
+                                    const int &minX,
+                                    const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
     {
         // Compute how many initial nodes
         const int nIni = round(static_cast<float>(maxX-minX)/(maxY-minY));
@@ -550,6 +560,7 @@ namespace ORB_SLAM3
         for(int i=0; i<nIni; i++)
         {
             ExtractorNode ni;
+            // 设置提取器节点的图像边界
             ni.UL = cv::Point2i(hX*static_cast<float>(i),0);
             ni.UR = cv::Point2i(hX*static_cast<float>(i+1),0);
             ni.BL = cv::Point2i(ni.UL.x,maxY-minY);
@@ -557,23 +568,27 @@ namespace ORB_SLAM3
             ni.vKeys.reserve(vToDistributeKeys.size());
 
             lNodes.push_back(ni);
-            vpIniNodes[i] = &lNodes.back();
+            vpIniNodes[i] = &lNodes.back(); // 存储这个初始的提取器节点句柄
         }
 
         //Associate points to childs
         for(size_t i=0;i<vToDistributeKeys.size();i++)
         {
+            // 将未分的所有关键点分配给2中构造的根结点，这样每个根节点都包
+            // 含了其所负责区域内的所有关键点 按特征点的横轴位置，分配给属于那个图像区域的提取器节点
             const cv::KeyPoint &kp = vToDistributeKeys[i];
             vpIniNodes[kp.pt.x/hX]->vKeys.push_back(kp);
         }
 
         list<ExtractorNode>::iterator lit = lNodes.begin();
 
+        // 根结点构成一个根结点list，代码中是lNodes用来更新与存储所有的根结点 
+        // 遍历lNodes，标记不可再分的节点
         while(lit!=lNodes.end())
         {
             if(lit->vKeys.size()==1)
             {
-                lit->bNoMore=true;
+                lit->bNoMore=true; // 用的标记变量
                 lit++;
             }
             else if(lit->vKeys.empty())
@@ -589,7 +604,7 @@ namespace ORB_SLAM3
         vector<pair<int,ExtractorNode*> > vSizeAndPointerToNode;
         vSizeAndPointerToNode.reserve(lNodes.size()*4);
 
-        while(!bFinish)
+        while(!bFinish) // 当列表中还有可分的结点区域的时候
         {
             iteration++;
 
@@ -601,7 +616,7 @@ namespace ORB_SLAM3
 
             vSizeAndPointerToNode.clear();
 
-            while(lit!=lNodes.end())
+            while(lit!=lNodes.end()) // 开始遍历列表中所有的提取器节点，并进行分解或者保留：
             {
                 if(lit->bNoMore)
                 {
@@ -609,7 +624,7 @@ namespace ORB_SLAM3
                     lit++;
                     continue;
                 }
-                else
+                else // 如果可分
                 {
                     // If more than one point, subdivide
                     ExtractorNode n1,n2,n3,n4;
@@ -623,7 +638,7 @@ namespace ORB_SLAM3
                         {
                             nToExpand++;
                             vSizeAndPointerToNode.push_back(make_pair(n1.vKeys.size(),&lNodes.front()));
-                            lNodes.front().lit = lNodes.begin();
+                            lNodes.front().lit = lNodes.begin(); // 将分出来的子结点作为新的根结点放入INodes的前部
                         }
                     }
                     if(n2.vKeys.size()>0)
@@ -657,13 +672,13 @@ namespace ORB_SLAM3
                         }
                     }
 
-                    lit=lNodes.erase(lit);
+                    lit=lNodes.erase(lit); // 然后将原先的根结点从列表中删除
                     continue;
                 }
             }
 
             // Finish if there are more nodes than required features
-            // or all nodes contain just one point
+            // or all nodes contain just one point 当所有节点不可分
             if((int)lNodes.size()>=N || (int)lNodes.size()==prevSize)
             {
                 bFinish = true;

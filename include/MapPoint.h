@@ -38,6 +38,9 @@ class KeyFrame;
 class Map;
 class Frame;
 
+/** 地图点可以通过关键帧来构造，也可以通过普通帧构造，但是最终，必须是和关键帧对应的，通过普通帧构造的地图点只是临时被Tracking用来追踪用的。
+ *
+ */
 class MapPoint
 {
     template<class Archive>
@@ -185,7 +188,7 @@ public:
     static long unsigned int nNextId;
     long int mnFirstKFid;
     long int mnFirstFrame;
-    int nObs;
+    int nObs; // !
 
     // Variables used by the tracking
     float mTrackProjX;
