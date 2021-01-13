@@ -36,6 +36,7 @@ TwoViewReconstruction::TwoViewReconstruction(cv::Mat& K, float sigma, int iterat
     mMaxIterations = iterations;
 }
 
+// 位姿估计，涉及到的知识点又多又关键的，包括对极约束、八点法、归一化、直接线性变换、卡方检验、重投影等
 bool TwoViewReconstruction::Reconstruct(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const vector<int> &vMatches12,
                                         cv::Mat &R21, cv::Mat &t21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated)
 {

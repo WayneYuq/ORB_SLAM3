@@ -703,12 +703,24 @@ int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const std::vector
     return nmatches;
 }
 
-int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f> &vbPrevMatched, vector<int> &vnMatches12, int windowSize)
+/** 单目初始化需要调用的两个函数之一, 另一个是KannalaBrandt8::ReconstructWithTwoViews
+ * 用于参考帧和当前帧的特征点匹配
+ * 
+ * 主要作用是构建旋转角度直方图，选取最优的三个Bin，也就是占据概率最大的三个Bin
+ * 
+ * 因为当前帧会提取到诸多特征点，每一个都可以作为图像旋转角度的测量值，我们希望
+ * 能在诸多的角度值中，选出最能代表当前帧的旋转角度的测量值，这就是为什么要在旋
+ * 转角度直方图中选最优的3个Bin的原因
+ */
+int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, 
+                                        vector<cv::Point2f> &vbPrevMatched, 
+                                        vector<int> &vnMatches12, 
+                                        int windowSize)
 {
     int nmatches=0;
     vnMatches12 = vector<int>(F1.mvKeysUn.size(),-1);
 
-    vector<int> rotHist[HISTO_LENGTH];
+    vector<int> rotHist[HISTO_LENGTH]; // 旋转角度直方图
     for(int i=0;i<HISTO_LENGTH;i++)
         rotHist[i].reserve(500);
     const float factor = 1.0f/HISTO_LENGTH;
@@ -793,7 +805,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
         int ind2=-1;
         int ind3=-1;
 
-        ComputeThreeMaxima(rotHist,HISTO_LENGTH,ind1,ind2,ind3);
+        ComputeThreeMaxima(rotHist,HISTO_LENGTH,ind1,ind2,ind3); // 计算概率最大的三个bin
 
         for(int i=0; i<HISTO_LENGTH; i++)
         {
@@ -812,7 +824,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
 
     }
 
-    //Update prev matched
+    //Update prev matched 参考帧和当前帧的特征点匹配
     for(size_t i1=0, iend1=vnMatches12.size(); i1<iend1; i1++)
         if(vnMatches12[i1]>=0)
             vbPrevMatched[i1]=F2.mvKeysUn[vnMatches12[i1]].pt;

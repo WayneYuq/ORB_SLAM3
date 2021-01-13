@@ -45,8 +45,19 @@ using namespace std;
 namespace ORB_SLAM3
 {
 
-
 /**
+ * Tracking部分作用论文已提及，包含输入当前帧、初始化、相机位姿跟踪、
+ * 局部地图跟踪、关键帧处理、姿态更新与保存等
+ *
+ * 单目地图初始化函数是Tracking::MonocularInitialization，
+ * 其主要是调用以下两个函数完成了初始化过程，ORBmatcher::SearchForInitialization
+ * 和KannalaBrandt8::ReconstructWithTwoViews，前者用于参考帧和当前帧的特征点匹配，
+ * 后者利用构建的虚拟相机模型，针对不同相机计算基础矩阵和单应性矩阵，选取最佳的模型来恢复
+ * 出最开始两帧之间的相对姿态，并进行三角化得到初始地图点。
+ * 
+ */
+
+s/**
  * @brief
  * 包含两部分：估计运动，跟踪局部地图
  * 
