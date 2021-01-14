@@ -84,6 +84,8 @@ bool TwoViewReconstruction::Reconstruct(const std::vector<cv::KeyPoint>& vKeys1,
         vAvailableIndices = vAllIndices;
 
         // Select a minimum set
+        // 在所有匹配特征点对中随机选择8对匹配特征点为一组
+        // 用于估计H矩阵和F矩阵
         for(size_t j=0; j<8; j++)
         {
             int randi = DUtils::Random::RandomInt(0,vAvailableIndices.size()-1);
@@ -114,6 +116,7 @@ bool TwoViewReconstruction::Reconstruct(const std::vector<cv::KeyPoint>& vKeys1,
 
     float minParallax = 1.0;
 
+    // 估计H矩阵和F矩阵
     // Try to reconstruct from homography or fundamental depending on the ratio (0.40-0.45)
     if(RH>0.50) // if(RH>0.40)
     {
@@ -186,8 +189,8 @@ void TwoViewReconstruction::FindFundamental(vector<bool> &vbMatchesInliers, floa
     // Normalize coordinates
     vector<cv::Point2f> vPn1, vPn2;
     cv::Mat T1, T2;
-    Normalize(mvKeys1,vPn1, T1);
-    Normalize(mvKeys2,vPn2, T2);
+    Normalize(mvKeys1,vPn1, T1); // 对图1匹配点进行归一化处理，减少噪声影响
+    Normalize(mvKeys2,vPn2, T2); // 对图2匹配点进行归一化处理
     cv::Mat T2t = T2.t();
 
     // Best Results variables
@@ -215,6 +218,9 @@ void TwoViewReconstruction::FindFundamental(vector<bool> &vbMatchesInliers, floa
 
         cv::Mat Fn = ComputeF21(vPn1i,vPn2i);
 
+        // 对上一步得到的解进行反归一化后处理，得到基础矩阵
+        // 但由于噪声、舍入误差和错匹配影响，仅仅求解非常不稳定，故采取RANSAC随机采样来
+        // 确保误差在正态分布范围内
         F21i = T2t*Fn*T1;
 
         currentScore = CheckFundamental(F21i, vbCurrentInliers, mSigma);
@@ -271,12 +277,17 @@ cv::Mat TwoViewReconstruction::ComputeH21(const vector<cv::Point2f> &vP1, const 
     return vt.row(8).reshape(0, 3);
 }
 
+/** 用DLT(直接线性变换)方法求解F矩阵
+ * 从诸多测量值中（超过8点的N个匹配点，超定方程）求最优解
+ */
 cv::Mat TwoViewReconstruction::ComputeF21(const vector<cv::Point2f> &vP1,const vector<cv::Point2f> &vP2)
 {
     const int N = vP1.size();
 
     cv::Mat A(N,9,CV_32F);
 
+    // 对应匹配点（m >= 8），构造系数矩阵A
+    // 对应十四讲7.12方程
     for(int i=0; i<N; i++)
     {
         const float u1 = vP1[i].x;
@@ -297,13 +308,20 @@ cv::Mat TwoViewReconstruction::ComputeF21(const vector<cv::Point2f> &vP1,const v
 
     cv::Mat u,w,vt;
 
+    // A = U * E * V^T
     cv::SVDecomp(A,w,u,vt,cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
 
+    // 去V的最后一行列向量V9作为解，因为上面分解过后，Vt表示是V的转置矩阵V^T，
+    // 所以要转置回来
     cv::Mat Fpre = vt.row(8).reshape(0, 3);
 
+    // 对得到的矩阵F^进行秩为2的约束，即对F^进行SVD分解
+    //                 [[V1, 0, 0]
+    // F = S * V * D =  [0, v2, 0]  * D   
+    //                  [0, 0, v3]]    
     cv::SVDecomp(Fpre,w,u,vt,cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
 
-    w.at<float>(2)=0;
+    w.at<float>(2)=0; // 令上式v3 = 0得到基础矩阵的估计
 
     return  u*cv::Mat::diag(w)*vt;
 }
@@ -393,7 +411,14 @@ float TwoViewReconstruction::CheckHomography(const cv::Mat &H21, const cv::Mat &
     return score;
 }
 
-float TwoViewReconstruction::CheckFundamental(const cv::Mat &F21, vector<bool> &vbMatchesInliers, float sigma)
+/** 对给定的F矩阵打分,需要使用到卡方检验的知识 
+ * “卡方检验”：就是检验两个变量之间有没有关系，统计样本的实际观测值与理论推断值之间的偏离程度。
+ * 过程：就是根据自由度，通过公示计算得到卡方值，然后通过卡方检验表获取我们的理论
+ * 阈值，加入测量结果（实际结果）大于理论阈值，则假设不成立，反之就成立
+ */
+float TwoViewReconstruction::CheckFundamental(const cv::Mat &F21, 
+                                              vector<bool> &vbMatchesInliers, 
+                                              float sigma)
 {
     const int N = mvMatches12.size();
 
@@ -428,7 +453,7 @@ float TwoViewReconstruction::CheckFundamental(const cv::Mat &F21, vector<bool> &
         const float u2 = kp2.pt.x;
         const float v2 = kp2.pt.y;
 
-        // Reprojection error in second image
+        // Reprojection error in second image 重投影误差
         // l2=F21x1=(a2,b2,c2)
 
         const float a2 = f11*u1+f12*v1+f13;
@@ -439,7 +464,7 @@ float TwoViewReconstruction::CheckFundamental(const cv::Mat &F21, vector<bool> &
 
         const float squareDist1 = num2*num2/(a2*a2+b2*b2);
 
-        const float chiSquare1 = squareDist1*invSigmaSquare;
+        const float chiSquare1 = squareDist1*invSigmaSquare; // 卡方检验值
 
         if(chiSquare1>th)
             bIn = false;
@@ -473,6 +498,7 @@ float TwoViewReconstruction::CheckFundamental(const cv::Mat &F21, vector<bool> &
     return score;
 }
 
+/** 利用得到的最佳模型（选择得分较高的矩阵值，单应矩阵H或者基础矩阵F）估计两帧之间的位姿 **/
 bool TwoViewReconstruction::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv::Mat &K,
                             cv::Mat &R21, cv::Mat &t21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
 {
@@ -497,6 +523,7 @@ bool TwoViewReconstruction::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat
     vector<bool> vbTriangulated1,vbTriangulated2,vbTriangulated3, vbTriangulated4;
     float parallax1,parallax2, parallax3, parallax4;
 
+    // 用R，t来对特征匹配点三角化，并根据三角化结果判断R,t的合法性
     int nGood1 = CheckRT(R1,t1,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D1, 4.0*mSigma2, vbTriangulated1, parallax1);
     int nGood2 = CheckRT(R2,t1,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D2, 4.0*mSigma2, vbTriangulated2, parallax2);
     int nGood3 = CheckRT(R1,t2,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D3, 4.0*mSigma2, vbTriangulated3, parallax3);
@@ -526,6 +553,7 @@ bool TwoViewReconstruction::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat
     }
 
     // If best reconstruction has enough parallax initialize
+    // 最终可以得到最优解的条件是位于相机前方的3D点个数最多并且三角化视差角必须大于最小视差角。
     if(maxGood==nGood1)
     {
         if(parallax1>minParallax)
@@ -751,6 +779,7 @@ void TwoViewReconstruction::Triangulate(const cv::KeyPoint &kp1, const cv::KeyPo
     x3D = x3D.rowRange(0,3)/x3D.at<float>(3);
 }
 
+/** 将当前帧和参考帧中的特征点坐标进行归一化 **/
 void TwoViewReconstruction::Normalize(const vector<cv::KeyPoint> &vKeys, vector<cv::Point2f> &vNormalizedPoints, cv::Mat &T)
 {
     float meanX = 0;
@@ -799,7 +828,9 @@ void TwoViewReconstruction::Normalize(const vector<cv::KeyPoint> &vKeys, vector<
     T.at<float>(1,2) = -meanY*sY;
 }
 
-
+/** 
+ * 用R, t对特征匹配点三角化，并根据三角化结果判断R, t合法性
+ */
 int TwoViewReconstruction::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::KeyPoint> &vKeys1, const vector<cv::KeyPoint> &vKeys2,
                        const vector<Match> &vMatches12, vector<bool> &vbMatchesInliers,
                        const cv::Mat &K, vector<cv::Point3f> &vP3D, float th2, vector<bool> &vbGood, float &parallax)
@@ -917,7 +948,7 @@ void TwoViewReconstruction::DecomposeE(const cv::Mat &E, cv::Mat &R1, cv::Mat &R
     cv::SVD::compute(E,w,u,vt);
 
     u.col(2).copyTo(t);
-    t=t/cv::norm(t);
+    t=t/cv::norm(t); // 因为尺度等价，所以可以全部归一化为1简化计算
 
     cv::Mat W(3,3,CV_32F,cv::Scalar(0));
     W.at<float>(0,1)=-1;
