@@ -479,6 +479,7 @@ float Initializer::CheckFundamental(const cv::Mat &F21, vector<bool> &vbMatchesI
     return score;
 }
 
+/** 利用得到的最佳模型（选择得分较高的矩阵值，单应矩阵H或者基础矩阵F）估计两帧之间的位姿R, t **/
 bool Initializer::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv::Mat &K,
                             cv::Mat &R21, cv::Mat &t21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
 {

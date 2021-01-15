@@ -23,6 +23,21 @@
 #include<thread>
 
 
+/**
+ * 单目方案的初始化过程再梳理一下：
+ * 
+ * 1. 对极约束是原理基础，从物理世界出发描述了整个视觉相机成像、数据来源以及相互关系的根本问题，
+ *    其中印象最深的是把搜索匹配点的范围缩小成一段极线，大大加速了匹配过程。
+ * 2. 八点法从求解的角度出发，用公式描述了获得我们想要的解的最小条件，提供了有力的数学基础。
+ * 3. 归一化使图像进行缩放，而缩放尺度是为了让噪声对于图像的影响在一个数量级上，从而减少噪声对图像的影响。
+ * 4. 直接线性转换则从诸多的测量值中（超过8点的N个匹配点，超定方程）算出了最优的解，使我们基本得到了想要的解。
+ * 5. 在已经有的粗解基础上利用统计学方法进行分析，筛选出优质的点（符合概率模型的内点）来构成我们
+ *    最终使用的一个投影的最优解，利用两帧图像上匹配点对进行相互投影，综合判断内外点，从而最小化误差。
+ * 6. 筛选出内外点之后，对两个模型进行打分，选出最优模型，然后通过三角化测量进行深度估计，最终完成初始化过程。
+ * 
+ * 至此，单目的初始化过程（基于基础矩阵F）完结。
+ */
+
 using namespace std;
 namespace ORB_SLAM3
 {
@@ -498,7 +513,7 @@ float TwoViewReconstruction::CheckFundamental(const cv::Mat &F21,
     return score;
 }
 
-/** 利用得到的最佳模型（选择得分较高的矩阵值，单应矩阵H或者基础矩阵F）估计两帧之间的位姿 **/
+/** 利用得到的最佳模型（选择得分较高的矩阵值，单应矩阵H或者基础矩阵F）估计两帧之间的位姿R, t **/
 bool TwoViewReconstruction::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv::Mat &K,
                             cv::Mat &R21, cv::Mat &t21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
 {
@@ -764,7 +779,14 @@ bool TwoViewReconstruction::ReconstructH(vector<bool> &vbMatchesInliers, cv::Mat
     return false;
 }
 
-void TwoViewReconstruction::Triangulate(const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, const cv::Mat &P1, const cv::Mat &P2, cv::Mat &x3D)
+/**
+ * 三角化恢复三维点的深度信息
+ * @param P1 投影矩阵 kp1 = s* P1 * X
+ * @param P2 投影矩阵
+ */
+void TwoViewReconstruction::Triangulate(const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, 
+                                        const cv::Mat &P1, const cv::Mat &P2, 
+                                        cv::Mat &x3D)
 {
     cv::Mat A(4,4,CV_32F);
 
@@ -775,8 +797,8 @@ void TwoViewReconstruction::Triangulate(const cv::KeyPoint &kp1, const cv::KeyPo
 
     cv::Mat u,w,vt;
     cv::SVD::compute(A,w,u,vt,cv::SVD::MODIFY_A| cv::SVD::FULL_UV);
-    x3D = vt.row(3).t();
-    x3D = x3D.rowRange(0,3)/x3D.at<float>(3);
+    x3D = vt.row(3).t(); // 取右奇异矩阵V^T最后一行
+    x3D = x3D.rowRange(0,3)/x3D.at<float>(3); // 归一化满足齐次方程的解的要求
 }
 
 /** 将当前帧和参考帧中的特征点坐标进行归一化 **/
@@ -872,7 +894,7 @@ int TwoViewReconstruction::CheckRT(const cv::Mat &R, const cv::Mat &t, const vec
         const cv::KeyPoint &kp2 = vKeys2[vMatches12[i].second];
         cv::Mat p3dC1;
 
-        Triangulate(kp1,kp2,P1,P2,p3dC1);
+        Triangulate(kp1,kp2,P1,P2,p3dC1); // p3dC1 通过三角化恢复的深度3d坐标
 
         if(!isfinite(p3dC1.at<float>(0)) || !isfinite(p3dC1.at<float>(1)) || !isfinite(p3dC1.at<float>(2)))
         {
